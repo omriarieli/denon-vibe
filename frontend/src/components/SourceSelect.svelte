@@ -1,6 +1,7 @@
 <script>
   import { source } from "../lib/stores.js";
   import { setSource } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   const sources = [
     { id: "TV", label: "TV Audio" },
@@ -20,9 +21,10 @@
     if (id === $source) return;
     loading = true;
     try {
-      await setSource(id);
+      const res = await setSource(id);
+      showToast("Source", res.source);
     } catch (e) {
-      console.error("Source select failed:", e);
+      showToast("Source", "Failed", false);
     }
     loading = false;
   }

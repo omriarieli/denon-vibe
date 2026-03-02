@@ -52,9 +52,32 @@ class HeosClient:
             self._reader = None
 
     async def _send(self, command: str) -> dict:
-        """Send a HEOS command and return parsed JSON response."""
+        """Send a HEOS command and return parsed JSON response. Auto-reconnects once on failure."""
         async with self._lock:
-            return await self._send_raw(command)
+            try:
+                return await self._send_raw(command)
+            except (ConnectionError, OSError, RuntimeError) as e:
+                logger.warning("HEOS send failed (%s), reconnecting...", e)
+                await self._reconnect()
+                return await self._send_raw(command)
+
+    async def _reconnect(self) -> None:
+        """Close the dead connection and open a fresh one."""
+        self._connected = False
+        if self._writer:
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            except Exception:
+                pass
+            self._writer = None
+            self._reader = None
+        self._reader, self._writer = await asyncio.wait_for(
+            asyncio.open_connection(self.host, self.port),
+            timeout=HEOS_TIMEOUT,
+        )
+        self._connected = True
+        logger.info("HEOS command client reconnected to %s:%s", self.host, self.port)
 
     async def _send_raw(self, command: str) -> dict:
         if not self._writer or not self._reader:

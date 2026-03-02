@@ -1,6 +1,7 @@
 <script>
   import { volume, mute } from "../lib/stores.js";
   import { setVolume, volumeUp, volumeDown, toggleMute } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   let debounceTimer = null;
   let localVolume = $state(null);
@@ -33,15 +34,21 @@
   }
 
   function handleMute() {
-    toggleMute().catch(console.error);
+    toggleMute()
+      .then((res) => showToast("Mute", res.mute))
+      .catch(() => showToast("Mute", "Failed", false));
   }
 
   function handleUp() {
-    volumeUp().catch(console.error);
+    volumeUp()
+      .then((res) => showToast("Volume", res.volume))
+      .catch(() => showToast("Volume", "Failed", false));
   }
 
   function handleDown() {
-    volumeDown().catch(console.error);
+    volumeDown()
+      .then((res) => showToast("Volume", res.volume))
+      .catch(() => showToast("Volume", "Failed", false));
   }
 
   let displayVolume = $derived(localVolume !== null ? localVolume : ($volume ?? 0));

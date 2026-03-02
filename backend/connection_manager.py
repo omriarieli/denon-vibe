@@ -145,13 +145,14 @@ class ConnectionManager:
         await self.startup()
         return self.state.avr_ip
 
-    async def update_state(self, **kwargs) -> None:
+    async def update_state(self, force_broadcast=False, **kwargs) -> None:
         """Update cached state and broadcast changes via WebSocket."""
         changed = {}
         for key, value in kwargs.items():
-            if hasattr(self.state, key) and getattr(self.state, key) != value:
-                setattr(self.state, key, value)
-                changed[key] = value
+            if hasattr(self.state, key):
+                if getattr(self.state, key) != value or force_broadcast:
+                    setattr(self.state, key, value)
+                    changed[key] = value
 
         if changed:
             for key, value in changed.items():

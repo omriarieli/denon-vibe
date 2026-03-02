@@ -9,6 +9,7 @@
   import SourceSelect from "./components/SourceSelect.svelte";
   import Favorites from "./components/Favorites.svelte";
   import RadioBrowser from "./components/RadioBrowser.svelte";
+  import Toast from "./components/Toast.svelte";
 
   onMount(() => {
     connectWs();
@@ -31,6 +32,7 @@
   <Favorites />
   <RadioBrowser />
 </main>
+<Toast />
 
 <style>
   :global(*) {

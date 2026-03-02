@@ -1,6 +1,7 @@
 <script>
   import { sleep } from "../lib/stores.js";
   import { setSleep } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   const presets = [0, 15, 30, 60, 90, 120];
   let loading = $state(false);
@@ -8,16 +9,18 @@
   async function handlePreset(minutes) {
     loading = true;
     try {
-      await setSleep(minutes);
+      const res = await setSleep(minutes);
+      const val = res.sleep === "OFF" ? "OFF" : `${parseInt(res.sleep, 10)}m`;
+      showToast("Sleep", val);
     } catch (e) {
-      console.error("Sleep timer failed:", e);
+      showToast("Sleep", "Failed", false);
     }
     loading = false;
   }
 
   function isActive(minutes) {
     if (minutes === 0) return $sleep === "OFF" || $sleep === null;
-    return $sleep === String(minutes);
+    return parseInt($sleep, 10) === minutes;
   }
 </script>
 

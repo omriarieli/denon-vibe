@@ -1,35 +1,17 @@
 <script>
   import { nowPlaying, playState } from "../lib/stores.js";
   import { setPlayState } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   let loading = $state(false);
 
-  async function handlePlay() {
+  async function handlePlayState(state) {
     loading = true;
     try {
-      await setPlayState("play");
+      const res = await setPlayState(state);
+      showToast("Playback", res.state);
     } catch (e) {
-      console.error(e);
-    }
-    loading = false;
-  }
-
-  async function handlePause() {
-    loading = true;
-    try {
-      await setPlayState("pause");
-    } catch (e) {
-      console.error(e);
-    }
-    loading = false;
-  }
-
-  async function handleStop() {
-    loading = true;
-    try {
-      await setPlayState("stop");
-    } catch (e) {
-      console.error(e);
+      showToast("Playback", "Failed", false);
     }
     loading = false;
   }
@@ -65,15 +47,15 @@
   </div>
 
   <div class="controls">
-    <button class="ctrl-btn" onclick={handleStop} disabled={loading} aria-label="Stop">
+    <button class="ctrl-btn" onclick={() => handlePlayState("stop")} disabled={loading} aria-label="Stop">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
     </button>
     {#if $playState === "play"}
-      <button class="ctrl-btn primary" onclick={handlePause} disabled={loading} aria-label="Pause">
+      <button class="ctrl-btn primary" onclick={() => handlePlayState("pause")} disabled={loading} aria-label="Pause">
         <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
       </button>
     {:else}
-      <button class="ctrl-btn primary" onclick={handlePlay} disabled={loading} aria-label="Play">
+      <button class="ctrl-btn primary" onclick={() => handlePlayState("play")} disabled={loading} aria-label="Play">
         <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><polygon points="6,4 20,12 6,20" /></svg>
       </button>
     {/if}

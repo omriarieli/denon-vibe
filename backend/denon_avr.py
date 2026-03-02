@@ -82,10 +82,10 @@ class DenonAVR:
                     break
 
             return lines
-        except (ConnectionError, OSError) as e:
+        except (ConnectionError, OSError, RuntimeError) as e:
             logger.error("AVR communication error: %s", e)
             self._connected = False
-            raise
+            raise ConnectionError(str(e)) from e
 
     def _parse_response(self, lines: list[str], prefix: str) -> str | None:
         for line in lines:

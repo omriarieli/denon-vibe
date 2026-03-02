@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import BrowseItem from "./BrowseItem.svelte";
   import { browseFavorites, playPreset } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   let items = $state([]);
   let loading = $state(false);
@@ -25,8 +26,9 @@
     const idx = items.indexOf(item) + 1;
     try {
       await playPreset(idx);
+      showToast("Playing", item.name);
     } catch (e) {
-      console.error("Play preset failed:", e);
+      showToast("Favorite", "Failed", false);
     }
   }
 </script>

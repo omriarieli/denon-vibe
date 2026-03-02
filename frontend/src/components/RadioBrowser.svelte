@@ -1,6 +1,7 @@
 <script>
   import BrowseItem from "./BrowseItem.svelte";
   import { browseTuneIn, playStation, searchTuneIn } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   let items = $state([]);
   let loading = $state(false);
@@ -29,8 +30,9 @@
   async function handlePlay(item) {
     try {
       await playStation(item.sid ?? 3, item.cid ?? "", item.mid ?? "", item.name);
+      showToast("Playing", item.name);
     } catch (e) {
-      console.error("Play station failed:", e);
+      showToast("Station", "Failed", false);
     }
   }
 

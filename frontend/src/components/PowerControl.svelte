@@ -1,19 +1,22 @@
 <script>
   import { power } from "../lib/stores.js";
   import { powerOn, powerOff } from "../lib/api.js";
+  import { showToast } from "../lib/toast.js";
 
   let loading = $state(false);
 
   async function toggle() {
     loading = true;
     try {
+      let res;
       if ($power === "ON") {
-        await powerOff();
+        res = await powerOff();
       } else {
-        await powerOn();
+        res = await powerOn();
       }
+      showToast("Power", res.power);
     } catch (e) {
-      console.error("Power toggle failed:", e);
+      showToast("Power", "Failed", false);
     }
     loading = false;
   }
