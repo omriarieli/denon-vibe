@@ -49,13 +49,44 @@ class DenonAVR:
             self._writer = None
             self._reader = None
 
-    async def _send_command(self, command: str, expect_multi: bool = False) -> list[str]:
-        """Send a command and return response lines."""
+    async def _send_command(
+        self, command: str, expect_multi: bool = False, prefix: str | None = None,
+    ) -> list[str]:
+        """Send a command and return response lines. Auto-reconnects once on failure.
+
+        If *prefix* is given, keep reading lines until one starts with prefix
+        (discarding unrelated unsolicited events) or until timeout.
+        """
         async with asyncio.timeout(TELNET_LOCK_TIMEOUT):
             async with self._lock:
-                return await self._send_raw(command, expect_multi)
+                try:
+                    return await self._send_raw(command, expect_multi, prefix)
+                except (ConnectionError, OSError, RuntimeError) as e:
+                    logger.warning("AVR send failed (%s), reconnecting...", e)
+                    await self._reconnect()
+                    return await self._send_raw(command, expect_multi, prefix)
 
-    async def _send_raw(self, command: str, expect_multi: bool) -> list[str]:
+    async def _reconnect(self) -> None:
+        """Close the dead connection and open a fresh one."""
+        self._connected = False
+        if self._writer:
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            except Exception:
+                pass
+            self._writer = None
+            self._reader = None
+        self._reader, self._writer = await asyncio.wait_for(
+            asyncio.open_connection(self.host, self.port),
+            timeout=TELNET_TIMEOUT,
+        )
+        self._connected = True
+        logger.info("Reconnected to Denon AVR telnet at %s:%s", self.host, self.port)
+
+    async def _send_raw(
+        self, command: str, expect_multi: bool, prefix: str | None = None,
+    ) -> list[str]:
         if not self._writer or not self._reader:
             raise ConnectionError("Not connected to AVR")
 
@@ -72,11 +103,15 @@ class DenonAVR:
                         timeout=TELNET_TIMEOUT,
                     )
                     line = data.decode().strip()
-                    if line:
-                        lines.append(line)
-                        logger.debug("Recv: %s", line)
+                    if not line:
+                        continue
+                    logger.debug("Recv: %s", line)
+                    # If a prefix filter is set, skip unsolicited events
+                    if prefix and not line.startswith(prefix):
+                        logger.debug("Skipping unsolicited: %s", line)
+                        continue
+                    lines.append(line)
                     if not expect_multi or len(lines) >= 2:
-                        # For multi-line responses, read up to 2 lines then stop
                         break
                 except asyncio.TimeoutError:
                     break
@@ -97,25 +132,25 @@ class DenonAVR:
 
     async def get_power(self) -> str | None:
         """Returns 'ON' or 'STANDBY'."""
-        lines = await self._send_command("PW?")
+        lines = await self._send_command("PW?", prefix="PW")
         val = self._parse_response(lines, "PW")
         return val
 
     async def power_on(self) -> str:
-        lines = await self._send_command("PWON")
+        lines = await self._send_command("PWON", prefix="PW")
         # Delay after power on per spec
         await asyncio.sleep(POWER_ON_DELAY)
         return self._parse_response(lines, "PW") or "ON"
 
     async def power_off(self) -> str:
-        lines = await self._send_command("PWSTANDBY")
+        lines = await self._send_command("PWSTANDBY", prefix="PW")
         return self._parse_response(lines, "PW") or "STANDBY"
 
     # --- Volume ---
 
     async def get_volume(self) -> int | None:
         """Returns volume level (0-98)."""
-        lines = await self._send_command("MV?", expect_multi=True)
+        lines = await self._send_command("MV?", expect_multi=True, prefix="MV")
         val = self._parse_response(lines, "MV")
         if val is None:
             return None
@@ -139,28 +174,28 @@ class DenonAVR:
 
     async def set_volume(self, level: int) -> int:
         cmd = f"MV{level:02d}"
-        await self._send_command(cmd, expect_multi=True)
+        await self._send_command(cmd, expect_multi=True, prefix="MV")
         return level
 
     async def volume_up(self) -> None:
-        await self._send_command("MVUP", expect_multi=True)
+        await self._send_command("MVUP", expect_multi=True, prefix="MV")
 
     async def volume_down(self) -> None:
-        await self._send_command("MVDOWN", expect_multi=True)
+        await self._send_command("MVDOWN", expect_multi=True, prefix="MV")
 
     # --- Mute ---
 
     async def get_mute(self) -> str | None:
         """Returns 'ON' or 'OFF'."""
-        lines = await self._send_command("MU?")
+        lines = await self._send_command("MU?", prefix="MU")
         return self._parse_response(lines, "MU")
 
     async def mute_on(self) -> str:
-        await self._send_command("MUON")
+        await self._send_command("MUON", prefix="MU")
         return "ON"
 
     async def mute_off(self) -> str:
-        await self._send_command("MUOFF")
+        await self._send_command("MUOFF", prefix="MU")
         return "OFF"
 
     async def toggle_mute(self) -> str:
@@ -173,25 +208,35 @@ class DenonAVR:
 
     async def get_sleep(self) -> str | None:
         """Returns minutes as string or 'OFF'."""
-        lines = await self._send_command("SLP?")
+        lines = await self._send_command("SLP?", prefix="SLP")
         return self._parse_response(lines, "SLP")
 
     async def set_sleep(self, minutes: int) -> str:
-        if minutes == 0:
-            await self._send_command("SLPOFF")
-            return "OFF"
-        cmd = f"SLP{minutes:03d}"
-        await self._send_command(cmd)
-        return str(minutes)
+        cmd = "SLPOFF" if minutes == 0 else f"SLP{minutes:03d}"
+        expected = "OFF" if minutes == 0 else f"{minutes:03d}"
+
+        for attempt in range(3):
+            await self._send_command(cmd, prefix="SLP")
+            await asyncio.sleep(0.3)
+            actual = await self.get_sleep()
+            if actual == expected:
+                return actual
+            logger.warning(
+                "Sleep verify attempt %d: expected %s, got %s",
+                attempt + 1, expected, actual,
+            )
+
+        logger.error("Sleep timer failed to set after 3 attempts")
+        return actual or ("OFF" if minutes == 0 else str(minutes))
 
     # --- Source / Input ---
 
     async def get_source(self) -> str | None:
         """Returns current input source like 'TV', 'NET', 'SAT/CBL', etc."""
-        lines = await self._send_command("SI?")
+        lines = await self._send_command("SI?", prefix="SI")
         return self._parse_response(lines, "SI")
 
     async def set_source(self, source: str) -> str:
         cmd = f"SI{source}"
-        await self._send_command(cmd)
+        await self._send_command(cmd, prefix="SI")
         return source

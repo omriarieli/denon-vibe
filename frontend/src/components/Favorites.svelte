@@ -21,11 +21,9 @@
     loading = false;
   }
 
-  async function handlePlay(item) {
-    // Favorites are played by preset index (1-based)
-    const idx = items.indexOf(item) + 1;
+  async function handlePlay(preset, item) {
     try {
-      await playPreset(idx);
+      await playPreset(preset);
       showToast("Playing", item.name);
     } catch (e) {
       showToast("Favorite", "Failed", false);
@@ -46,8 +44,8 @@
   {/if}
 
   <div class="items-list">
-    {#each items as item}
-      <BrowseItem {item} onplay={handlePlay} />
+    {#each items as item, i}
+      <BrowseItem {item} onplay={() => handlePlay(i + 1, item)} />
     {/each}
     {#if !loading && items.length === 0 && !error}
       <div class="empty">No favorites found</div>
